@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Tracker</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Excel Tracker</h1>
+        <hr>
+        <h2>Upload Excel File</h2>
+<form id="uploadForm" enctype="multipart/form-data" method="post">
+    <div class="form-group">
+        <label for="fileInput">Select File:</label>
+        <input type="file" class="form-control-file" id="fileInput" name="fileInput">
+    </div>
+    <button type="button" class="btn btn-primary" id="uploadButton">Upload</button>
+</form>
+
+        <hr>
+        <h2>Add Data</h2>
+        <form id="addDataForm">
+            <div class="form-row">
+                <div class="form-group col-md-4">
+                    <label for="conceptInput">Concept:</label>
+                    <input type="text" class="form-control" id="conceptInput" name="concept">
+                </div>
+                <div class="form-group col-md-4">
+                    <label for="skuInput">SKU:</label>
+                    <input type="text" class="form-control" id="skuInput" name="sku">
+                </div>
+                <div class="form-group col-md-4">
+                    <label for="statusInput">Status:</label>
+                    <input type="text" class="form-control" id="statusInput" name="status">
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary" id="addDataButton">Add Data</button>
+        </form>
+        <hr>
+        <h2>Search Data</h2>
+        <form id="searchForm">
+            <div class="form-row">
+                <div class="form-group col-md-4">
+                    <label for="searchConceptInput">Concept:</label>
+                    <input type="text" class="form-control" id="searchConceptInput" name="concept">
+                </div>
+                <div class="form-group col-md-4">
+                    <label for="searchSkuInput">SKU:</label>
+                    <input type="text" class="form-control" id="searchSkuInput" name="sku">
+                </div>
+                <div class="form-group col-md-4">
+                    <label for="searchStatusInput">Status:</label>
+                    <input type="text" class="form-control" id="searchStatusInput" name="status">
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary" id="searchButton">Search</button>
+        </form>
+        <hr>
+        <h2>Search Results</h2>
+        <table id="searchResultsTable" class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Concept</th>
+                    <th>SKU</th>
+                    <th>Shoot Date</th>
+                    <th>Photographer</th>
+                    <th>Stylist</th>
+                    <th>Offline-CC</th>
+                    <th>Comments</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.0.7/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            // Handle file upload
+            $('#uploadButton').click(function () {
+                var fileInput = $('#fileInput')[0];
+                var file = fileInput.files[0];
+                var formData = new FormData();
+                formData.append('file', file);
+                $.ajax({
+                    url: '/upload',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function (response) {
+                        alert(response.message);
+                    },
+                    error: function (xhr, status, error) {
+                        alert('Error uploading file. Please try again.');
+                    }
+                });
+            });
+
+            // Handle add data
+            $('#addDataButton').click(function () {
+                var concept = $('#conceptInput').val();
+                var sku = $('#skuInput').val();
+                var status = $('#statusInput').val();
+                var formData = {
+                    concept: concept,
+                    sku: sku,
+                    status: status
+                };
+                $.ajax({
+                    url: '/add_data',
+                    type: 'POST',
+                    data: formData,
+                    success: function (response) {
+                        alert(response.message);
+                    },
+                    error: function (xhr, status, error) {
+                        alert('Error adding data. Please try again.');
+                    }
+                });
+            });
+
+            // Handle search
+            $('#searchButton').click(function () {
+                var concept = $('#searchConceptInput').val();
+                var sku = $('#searchSkuInput').val();
+                var status = $('#searchStatusInput').val();
+                var formData = {
+                    concept: concept,
+                    sku: sku,
+                    status: status
+                };
+                $.ajax({
+                    url: '/search',
+                    type: 'POST',
+                    data: formData,
+                    success: function (response) {
+                        populateSearchResults(response);
+                    },
+                    error: function (xhr, status, error) {
+                        alert('Error searching data. Please try again.');
+                    }
+                });
+            });
+
+            // Populate search results
+            function populateSearchResults(data) {
+                var tableBody = $('#searchResultsTable tbody');
+                tableBody.empty();
+                if (data.length > 0) {
+                    $.each(data, function (index, row) {
+                        var newRow = $('<tr>');
+                        newRow.append($('<td>').text(row.Concept));
+                        newRow.append($('<td>').text(row.SKU));
+                        newRow.append($('<td>').text(row['Shoot Date']));
+                        newRow.append($('<td>').text(row.Photographer));
+                        newRow.append($('<td>').text(row.Stylist));
+                        newRow.append($('<td>').text(row['Offline-CC']));
+                        newRow.append($('<td>').text(row.Comments));
+                        newRow.append($('<td>').text(row.Status));
+                        tableBody.append(newRow);
+                    });
+                } else {
+                    var noResultsRow = $('<tr>').append($('<td colspan="8">').text('No results found.'));
+                    tableBody.append(noResultsRow);
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
