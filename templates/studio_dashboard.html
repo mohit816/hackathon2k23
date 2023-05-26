@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Studio Dashboard</title>
+</head>
+<body>
+    <h1>Welcome Studio User!</h1>
+    <form action="/upload" method="POST" enctype="multipart/form-data">
+        <label for="concept">Concept:</label>
+        <select name="concept" id="concept">
+            <option value="MAX">MAX</option>
+            <option value="SHOEMART">SHOEMART</option>
+            <option value="STYLI">STYLI</option>
+        </select>
+        <input type="file" name="csv-file" accept=".csv">
+        <button type="submit">Upload</button>
+    </form>
+</body>
+</html>

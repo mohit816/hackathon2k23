@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Concept Dashboard</title>
+</head>
+<body>
+    <h1>Welcome Concept User!</h1>
+    <form action="/concept/upload" method="POST" enctype="multipart/form-data">
+        <label for="concept">Concept:</label>
+        <select name="concept" id="concept">
+            <option value="MAX">MAX</option>
+            <option value="SHOEMART">SHOEMART</option>
+            <option value="STYLI">STYLI</option>
+        </select>
+        <label for="product-origin">Product Origin:</label>
+        <select name="product-origin" id="product-origin">
+            <option value="SAMPLE">SAMPLE</option>
+            <option value="WAREHOUSE">WAREHOUSE</option>
+            <option value="SUPPLIER">SUPPLIER</option>
+        </select>
+        <input type="file" name="csv-file" accept=".csv">
+        <button type="submit">Upload</button>
+    </form>
+    <h2>Uploaded Files</h2>
+    <ul>
+        {% for concept in concept_values %}
+            {% for product_origin in product_origin_values %}
+                <li><a href="/concept/download/{{ concept }}_{{ product_origin }}.csv">{{ concept }} - {{ product_origin }}</a></li>
+            {% endfor %}
+        {% endfor %}
+    </ul>
+</body>
+</html>

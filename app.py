@@ -1,196 +1,145 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
-from flask_socketio import SocketIO
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
-import pandas as pd
+from flask import Flask, request, jsonify, session
+import jwt
 import os
 from werkzeug.utils import secure_filename
+import csv
+from Backend import Backend
+from functools import wraps
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+app.secret_key = '458cc0d8c5d6fb02175a21e3a58be785'  # Update with your secret key
+backend = Backend()
 
-# Configure the secret key
-app.config['SECRET_KEY'] = '77c9232f44e495f0c83c5f994ed70087'
+# Mock database or backend for authentication
+def authenticate(username, password):
+    # Your authentication logic here
+    # Return the user's role if authenticated, otherwise None
+    if username == 'studio' and password == 'password':
+        return 'studio'
+    elif username == 'concept' and password == 'password':
+        return 'concept'
+    else:
+        return None
 
-# File path for the tracker data CSV file
-csv_file_path = 'tracker_data.csv'
 
-# Initialize an empty DataFrame for tracker data
-tracker_data = pd.DataFrame()
+# Decorator to check if the token is valid and extract the user details
+def authenticate_token(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        token = request.headers.get('Authorization')
 
-# User class for authentication
-class User(UserMixin):
-    def __init__(self, username, password, role):
-        self.username = username
-        self.password_hash = generate_password_hash(password)
-        self.role = role
+        if not token:
+            return jsonify({'message': 'Authorization token is missing'}), 401
 
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        try:
+            # Verify and decode the token
+            payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+            username = payload['username']
+            role = payload['role']
 
-    def get_id(self):
-        return self.username
+            # Add the user details to the kwargs
+            kwargs['username'] = username
+            kwargs['role'] = role
 
-# User credentials dictionary
-users = {
-    'studio_user': User('studio_user', 'studio_password', 'studio'),
-    'cc_user': User('cc_user', 'cc_password', 'cc'),
-    'concept_user': User('concept_user', 'concept_password', 'concept'),
-    'general_user': User('general_user', 'general_password', 'general')
-}
+            # Call the decorated function
+            return func(*args, **kwargs)
 
-# Initialize the login manager
-login_manager = LoginManager()
-login_manager.login_view = 'login'
-login_manager.init_app(app)
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired'}), 401
 
-@login_manager.user_loader
-def load_user(username):
-    return users.get(username)
+        except (jwt.InvalidTokenError, KeyError):
+            return jsonify({'message': 'Invalid token'}), 401
 
-# Login route
-@app.route('/login', methods=['GET', 'POST'])
+    return wrapper
+
+
+
+def allowed_file(filename):
+    # Add your file extension validation logic here
+    allowed_extensions = {'csv'}
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
+@app.route('/upload', methods=['POST'])
+@authenticate_token
+def upload_csv(username,role):
+    if role != 'studio':  # Check the role
+        return jsonify({'message': 'Unauthorized'}), 401
+
+    if 'csv-file' not in request.files:
+        return jsonify({'message': 'No file part in the request'}), 400
+
+    file = request.files['csv-file']
+    if file.filename == '':
+        return jsonify({'message': 'No file selected'}), 400
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join('uploads', filename)
+        file.save(file_path)
+
+        concept = request.form.get('concept')
+        product_origin = request.form.get('product_origin')
+
+        try:
+            # Specify the encoding when opening the file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # Process the file data
+                # ...
+
+                return jsonify({'message': 'File uploaded and processed successfully'}), 200
+
+        except UnicodeDecodeError:
+            return jsonify({'message': 'Invalid file encoding'}), 400
+
+    else:
+        return jsonify({'message': 'Invalid file format'}), 400
+
+
+
+
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({'message': 'Welcome to the API'}), 200
+
+
+@app.route('/login', methods=['POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = users.get(username)
-        if user and user.check_password(password):
-            login_user(user)
-            return redirect(url_for('index'))
+        data = request.json  # Get the JSON data from the request body
+        username = data.get('username')
+        password = data.get('password')
+        print(f"Received login request: username={username}, password={password}")
+
+        role = authenticate(username, password)
+        print(f"Authentication result: role={role}")
+
+        if role:
+            # Generate JWT token
+            token = jwt.encode({'username': username, 'role': role}, app.secret_key, algorithm='HS256')
+
+            return jsonify({'message': 'Login successful', 'role': role, 'token': token}), 200
         else:
-            flash('Invalid username or password', 'error')
-    return render_template('login.html')
-
-# Logout route
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('index'))
-
-# Index route
-@app.route('/')
-@login_required
-def index():
-    return render_template('index.html')
-
-# Upload route
-@app.route('/upload', methods=['POST'])
-@login_required
-def upload():
-    if request.method == 'POST':
-        file = request.files['file']
-        if file:
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(os.getcwd(), filename)  # Set file path to current working directory
-            file.save(file_path)
-            load_tracker_data(file_path)  # Load the uploaded file into tracker data
-            return 'File uploaded successfully!'
-    return 'Invalid request method or no file provided.'
-
-# Add data route
-@app.route('/add_data', methods=['POST'])
-@login_required
-def add_data():
-    if request.method == 'POST':
-        new_data = request.form.to_dict()
-        add_tracker_data(new_data)  # Add new data to the tracker data
-        save_tracker_data()  # Save the updated data to the CSV file
-        return 'Data added successfully!'
-    return 'Invalid request method.'
-
-# Search route
-@app.route('/search', methods=['POST'])
-@login_required
-def search():
-    if request.method == 'POST':
-        concept = request.form.get('concept')
-        sku = request.form.get('sku')
-        status = request.form.get('status')
-        result = search_tracker_data(concept, sku, status)  # Search for data in the tracker data
-        return render_template('search_result.html', result=result)
-    return 'Invalid request method.'
-
-# Load tracker data from a file
-def load_tracker_data(file_path):
-    global tracker_data
-    if os.path.isfile(csv_file_path):
-        tracker_data = pd.read_csv(csv_file_path)
+            return jsonify({'message': 'Invalid credentials'}), 401
     else:
-        tracker_data = pd.DataFrame(columns=['Concept', 'SKU', 'Shoot Date', 'Photographer', 'Stylist', 'Offline-CC', 'Comments', 'Status'])
-    new_data = pd.read_csv(file_path)
-    tracker_data = pd.concat([tracker_data, new_data], ignore_index=True)
+        return jsonify({'message': 'Invalid request method'}), 400
 
-# Add new data to the tracker data
-def add_tracker_data(new_data):
-    global tracker_data
-    if isinstance(new_data, dict):
-        new_data = pd.DataFrame(new_data, index=[0])
-    tracker_data = pd.concat([tracker_data, new_data], ignore_index=True)
-    tracker_data = tracker_data.drop_duplicates()
 
-# Save the tracker data to a CSV file
-def save_tracker_data():
-    global tracker_data, csv_file_path
-    tracker_data.to_csv(csv_file_path, index=False)
+@app.route('/dashboard', methods=['GET'])
+@authenticate_token
+def dashboard(**kwargs):
+    role = kwargs.get('role')
 
-# Search for data in the tracker data
-def search_tracker_data(concept, sku, status):
-    global tracker_data
-    result = tracker_data
-    if concept:
-        result = result[result['Concept'] == concept]
-    if sku:
-        result = result[result['SKU'] == sku]
-    if status:
-        result = result[result['Status'] == status]
-    return result.to_dict('records')
+    if role == 'studio':
+        concept_values = ['MAX', 'SHOEMART', 'STYLI']
+        product_origin_values = ['SAMPLE', 'SUPPLIER', 'WAREHOUSE']
+        return jsonify({'message': 'Welcome to the studio dashboard', 'role': role,
+                        'concept_values': concept_values, 'product_origin_values': product_origin_values}), 200
+    elif role == 'concept':
+        return jsonify({'message': 'Welcome to the concept dashboard', 'role': role}), 200
+    else:
+        return jsonify({'message': 'Unknown role'}), 401
 
-# Role-based access decorator
-def role_required(role):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if current_user.role == role:
-                return func(*args, **kwargs)
-            else:
-                abort(403)  # Access denied
-        return wrapper
-    return decorator
-
-# Studio dashboard route (accessible only to users with 'studio' role)
-@app.route('/studio_dashboard')
-@login_required
-@role_required('studio')
-def studio_dashboard():
-    # ...
-    pass
-
-# CC dashboard route (accessible only to users with 'cc' role)
-@app.route('/cc_dashboard')
-@login_required
-@role_required('cc')
-def cc_dashboard():
-    # ...
-    pass
-
-# Concept dashboard route (accessible only to users with 'concept' role)
-@app.route('/concept_dashboard')
-@login_required
-@role_required('concept')
-def concept_dashboard():
-    # ...
-    pass
-
-# General dashboard route (accessible only to users with 'general' role)
-@app.route('/general_dashboard')
-@login_required
-@role_required('general')
-def general_dashboard():
-    # ...
-    pass
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    app.run(debug=True)

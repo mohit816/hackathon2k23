@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+</head>
+<body>
+    <h1>Welcome, {{ session['username'] }}</h1>
+    <h2>Dashboard</h2>
+    {% if session['role'] == 'STUDIO' %}
+        <p>Logged in as Studio user. Upload the CSV file.</p>
+        <a href="/upload">Upload CSV</a>
+    {% elif session['role'] in ['MAX', 'SHOEMART', 'STYLI'] %}
+        <p>Logged in as Concept user ({{ session['role'] }}).</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Inward Base Product ID</th>
+                    <th>Inward Date</th>
+                    <th>Ean Code</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in data %}
+                    <tr>
+                        <td>{{ item['Inward Base Product ID'] }}</td>
+                        <td>{{ item['Inward Date'] }}</td>
+                        <td>{{ item['Ean Code'] }}</td>
+                        <td>{{ item['Status'] }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+    <br>
+    <a href="/logout">Logout</a>
+</body>
+</html>
